@@ -27,7 +27,7 @@ app.add_middleware(LoggingMiddleware)
 # CORS Configuration
 # ----------------------------
 ALLOWED_ORIGINS = [
-    "http://localhost:4173",  # Your frontend URL
+    "http://localhost:5173",  # Your frontend URL
     # Add deployed frontend URLs here if needed
 ]
 
