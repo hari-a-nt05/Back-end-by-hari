@@ -1,5 +1,4 @@
 import logging
-
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
@@ -9,49 +8,33 @@ from app.api import api_router
 from app.middleware.logging_middleware import LoggingMiddleware
 from app.utils.logging_utils import setup_logger
 
-# ----------------------------
-# Logging Configuration
-# ----------------------------
+# Initialize logging
 logger = setup_logger("app")
 logging.getLogger("uvicorn.access").handlers = logger.handlers
 
-# ----------------------------
-# FastAPI App Initialization
-# ----------------------------
 app = FastAPI(title="HireHub Backend", version="1.0.0")
 
-# Add request/response logging middleware
-app.add_middleware(LoggingMiddleware)
-
-# ----------------------------
-# CORS Configuration
-# ----------------------------
-ALLOWED_ORIGINS = [
-    "http://localhost:5173",  # Your frontend URL
-    # Add deployed frontend URLs here if needed
-]
-
-ALLOWED_METHODS = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
-ALLOWED_HEADERS = ["*"]  # Allow all headers like Content-Type, Authorization
-
+# ✅ Correct CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
+    allow_origins=[
+        "http://localhost:5173",      # your frontend dev server
+        "http://127.0.0.1:5173",      # sometimes React/Vite uses this
+        "http://0.0.0.0:5173",        # optional for Docker/EC2 setups
+    ],
     allow_credentials=True,
-    allow_methods=ALLOWED_METHODS,
-    allow_headers=ALLOWED_HEADERS,
+    allow_methods=["*"],  # or ["GET", "POST", "OPTIONS"]
+    allow_headers=["*"],  # include "Content-Type", "Authorization", etc.
 )
 
-# ----------------------------
-# Templates Configuration
-# ----------------------------
+# Add custom logging middleware
+app.add_middleware(LoggingMiddleware)
+
 templates = Jinja2Templates(directory="app/templates")
 
 @app.get("/", response_class=HTMLResponse)
 def homepage(request: Request):
     return templates.TemplateResponse("home.html", {"request": request})
 
-# ----------------------------
-# API Router
-# ----------------------------
+# Include routers
 app.include_router(api_router, prefix="/api/v1")
