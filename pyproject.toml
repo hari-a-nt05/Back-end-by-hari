@@ -1,0 +1,62 @@
+[tool.black]
+line-length = 88
+target-version = ["py312"]
+
+[tool.isort]
+profile = "black"
+line_length = 88
+multi_line_output = 3
+include_trailing_comma = true
+skip = ["venv", ".venv"]
+
+known_first_party = [
+    "config",
+    "utils",
+    "adapters",
+    "app",
+    "api"
+]
+
+known_third_party = [
+    "aiohttp",
+    "boto3",
+    "fastapi",
+    "langchain",
+    "langchain-community",
+    "langchain-core",
+    "langchain-text-splitters",
+    "langgraph",
+    "langgraph-checkpoint",
+    "langgraph-prebuilt",
+    "langgraph-sdk",
+    "langsmith",
+    "marshmallow",
+    "numpy",
+    "pydantic",
+    "redis",
+    "ruff",
+    "requests",
+    "sqlalchemy",
+    "starlette",
+    "tenacity",
+    "uvicorn",
+    "jinja2"
+]
+
+known_standard_library = [
+    "os",
+    "sys",
+    "json",
+    "time",
+    "datetime",
+    "logging",
+    "pathlib",
+    "subprocess",
+    "collections",
+    "itertools",
+    "functools",
+    "socket",
+    "typing",
+    "uuid",
+    "secrets"
+]
