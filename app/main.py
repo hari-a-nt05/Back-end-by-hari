@@ -12,7 +12,7 @@ from app.utils.logging_utils import setup_logger
 logger = setup_logger("app")
 logging.getLogger("uvicorn.access").handlers = logger.handlers
 
-app = FastAPI(title="HireHub Backend", version="1.0.0")
+app = FastAPI(title="HireHub Backend", version="1.0.0",root_path="/backend")
 
 # ✅ Correct CORS configuration
 app.add_middleware(
