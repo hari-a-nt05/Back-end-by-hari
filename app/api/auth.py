@@ -8,7 +8,12 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.security import create_access_token, get_password_hash, verify_password
+from app.core.security import (
+    create_access_token,
+    get_password_hash,
+    needs_rehash,
+    verify_password,
+)
 from app.models.user import User
 from app.schemas.token import Token
 from app.schemas.user import UserBase, UserCreate, UserOut
@@ -45,11 +50,39 @@ def login(
     form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
 ):
     user = db.query(User).filter(User.email == form_data.username).first()
-    if not user or not verify_password(form_data.password, user.hashed_password):
+    if not user:
+        logging.debug("Login failed: user not found: %s", form_data.username)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
         )
+
+    verified = verify_password(form_data.password, user.hashed_password)
+    logging.debug(
+        "Login attempt for %s: hashed_password_len=%s verified=%s",
+        form_data.username,
+        len(user.hashed_password) if user.hashed_password else 0,
+        verified,
+    )
+    if not verified:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+        )
+
+    # Rehash password to preferred scheme on successful login if needed
+    try:
+        if needs_rehash(user.hashed_password):
+            logging.info(
+                "Rehashing password for user %s to preferred scheme", user.email
+            )
+            user.hashed_password = get_password_hash(form_data.password)
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+    except Exception:
+        # Don't block login on rehash failures; log for investigation
+        logging.exception("Failed to rehash password for user %s", user.email)
     access_token = create_access_token(
         data={"sub": str(user.id), "role": user.role},
         expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),

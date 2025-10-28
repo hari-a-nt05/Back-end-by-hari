@@ -1,10 +1,4 @@
-ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://localhost:8000",
-    "http://localhost:5173",
-]
-
-ALLOWED_METHODS = ["GET", "POST", "PUT", "OPTIONS"]
+ALLOWED_METHODS = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
 
 ALLOWED_HEADERS = [
     "Accept",
@@ -14,6 +8,9 @@ ALLOWED_HEADERS = [
     "Content-Type",
     "Cache-Control",
     "X-Requested-With",
+    "Origin",
+    "Access-Control-Request-Method",
+    "Access-Control-Request-Headers",
 ]
 
 LOG_TO_FILE = True

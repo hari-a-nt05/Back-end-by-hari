@@ -2,14 +2,33 @@ import os
 import secrets
 from typing import Annotated, Any, Literal
 
-from pydantic import AnyUrl, BeforeValidator, computed_field, Field
+from pydantic import AnyUrl, BeforeValidator, Field, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 def parse_cors(v: Any) -> list[str] | str:
+    """Parse BACKEND_CORS_ORIGINS environment variable.
+
+    Accepts:
+    - a comma-separated string: "http://a.com,https://b.com" or "54.90.86.144:5173"
+    - a JSON-style list string (starts with '[')
+    - a python list
+
+    For entries that look like a host or host:port without a scheme (e.g. "54.90.86.144:5173")
+    prepend "http://" so Pydantic's AnyUrl validation accepts it.
+    """
     if isinstance(v, str) and not v.startswith("["):
-        return [i.strip() for i in v.split(",")]
-    elif isinstance(v, list | str):
+        parts = [i.strip() for i in v.split(",") if i.strip()]
+        normalized: list[str] = []
+        for p in parts:
+            # leave absolute (http/https) and relative paths (starting with '/') as-is
+            if p.startswith(("http://", "https://", "/")):
+                normalized.append(p)
+            else:
+                # If scheme missing, assume http://
+                normalized.append("http://" + p)
+        return normalized
+    elif isinstance(v, list) or isinstance(v, str):
         return v
     raise ValueError(v)
 
@@ -42,8 +61,8 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
 
     DB_URL: str = Field(
-        "postgresql://postgres:navat@localhost/yourdb",
-        env="DATABASE_URL",
+        "postgresql://postgres:postgres@localhost/hirehub",
+        env="DB_URL",
     )
     # Microsoft Graph / Azure AD configuration (optional)
     AZURE_TENANT_ID: str | None = None
