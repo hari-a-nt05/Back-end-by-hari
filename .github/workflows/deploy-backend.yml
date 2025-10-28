@@ -1,0 +1,34 @@
+name: 🚀 Deploy Backend to EC2
+
+on:
+  push:
+    branches:
+      - main  # trigger only when main branch updates
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH key
+        uses: webfactory/ssh-agent@v0.8.1
+        with:
+          ssh-private-key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+
+      - name: Deploy backend files to EC2
+        run: |
+          rsync -avz -e "ssh -o StrictHostKeyChecking=no" \
+            --exclude '.venv' --exclude '__pycache__' --exclude '*.log' \
+            ./ ubuntu@${{ secrets.EC2_HOST }}:/home/ubuntu/Back-end-by-hari/
+
+      - name: Install dependencies and restart backend service
+        run: |
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+          cd /home/ubuntu/Back-end-by-hari
+          source .venv/bin/activate
+          pip install -r requirements.txt
+          sudo systemctl restart backend
+          EOF
