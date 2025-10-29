@@ -7,16 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 def parse_cors(v: Any) -> list[str] | str:
-    """Parse BACKEND_CORS_ORIGINS environment variable.
-
-    Accepts:
-    - a comma-separated string: "http://a.com,https://b.com" or "54.90.86.144:5173"
-    - a JSON-style list string (starts with '[')
-    - a python list
-
-    For entries that look like a host or host:port without a scheme (e.g. "54.90.86.144:5173")
-    prepend "http://" so Pydantic's AnyUrl validation accepts it.
-    """
+    """Parse BACKEND_CORS_ORIGINS environment variable."""
     if isinstance(v, str) and not v.startswith("["):
         parts = [i.strip() for i in v.split(",") if i.strip()]
         normalized: list[str] = []
@@ -60,10 +51,7 @@ class Settings(BaseSettings):
 
     JWT_ALGORITHM: str = "HS256"
 
-    DB_URL: str = Field(
-        "postgresql://postgres:postgres@localhost/hirehub",
-        env="DB_URL",
-    )
+    DB_URL: str = Field(env="DB_URL")
     # Microsoft Graph / Azure AD configuration (optional)
     AZURE_TENANT_ID: str | None = None
     AZURE_CLIENT_ID: str | None = None

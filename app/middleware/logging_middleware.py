@@ -1,10 +1,9 @@
 import time
-from collections.abc import Awaitable
-from typing import Callable
+from typing import Awaitable, Callable
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 
 from app.utils.logging_utils import setup_logger
 
@@ -17,9 +16,15 @@ class LoggingMiddleware(BaseHTTPMiddleware):  # type: ignore[misc]
         self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
         start_time = time.time()
-
-        # Await the call_next function to get the response
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        except Exception:
+            process_time = (time.time() - start_time) * 1000
+            logger.exception(
+                f"{request.method} {request.url.path} → 500 ({process_time:.2f} ms)"
+            )
+            # Return JSON error (CORS headers are applied by outer middleware)
+            return JSONResponse({"detail": "Internal Server Error"}, status_code=500)
 
         process_time = (time.time() - start_time) * 1000
 
