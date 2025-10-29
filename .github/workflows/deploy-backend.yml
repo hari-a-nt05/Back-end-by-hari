@@ -3,7 +3,7 @@ name: 🚀 Deploy Backend to EC2
 on:
   push:
     branches:
-      - main  # Trigger on main branch push
+      - main  # Trigger when main branch updates
  
 jobs:
   deploy:
@@ -22,21 +22,32 @@ jobs:
         run: |
           ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
           set -e
-          cd ~/Back-end-by-hari
+ 
+          echo "📂 Navigating to backend directory..."
+          cd /var/www/backend
  
           echo "📦 Pulling latest backend code..."
-          git pull origin main || true
+          git pull origin main || echo "⚠️ Repo not found, skipping pull."
  
-          echo "🧹 Cleaning old cache files..."
+          echo "🧹 Cleaning Python cache..."
           find . -type d -name "__pycache__" -exec rm -rf {} +
  
-          echo "📥 Updating Python environment..."
-          source .venv/bin/activate
+          echo "🐍 Activating virtual environment..."
+          if [ -d ".venv" ]; then
+            source .venv/bin/activate
+          else
+            echo "⚙️ Virtual environment not found — creating one..."
+            python3 -m venv .venv
+            source .venv/bin/activate
+          fi
+ 
+          echo "📥 Installing dependencies..."
+          pip install --upgrade pip
           pip install -r requirements.txt
  
-          echo "🧾 Checking .env file..."
+          echo "🧾 Checking for .env file..."
           if [ ! -f .env ]; then
-            echo "⚠️  .env file missing! Please add it manually."
+            echo "⚠️ .env file missing! Please upload it manually or use AWS Secrets Manager."
           fi
  
           echo "🔁 Restarting backend service..."
