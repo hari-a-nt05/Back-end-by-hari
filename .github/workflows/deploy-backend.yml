@@ -3,7 +3,7 @@ name: 🚀 Deploy Backend to EC2
 on:
   push:
     branches:
-      - main  # Trigger when main branch updates
+      - main  # Trigger on push to main
  
 jobs:
   deploy:
@@ -13,12 +13,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
  
-      - name: Setup SSH key
+      - name: Setup SSH
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
  
-      - name: Deploy and Restart Backend
+      - name: 🚀 Deploy Backend to EC2
         run: |
           ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
           set -e
@@ -27,32 +27,31 @@ jobs:
           cd /var/www/backend
  
           echo "📦 Pulling latest backend code..."
-          git pull origin main || echo "⚠️ Repo not found, skipping pull."
+          git fetch origin main
+          git reset --hard origin/main
  
           echo "🧹 Cleaning Python cache..."
           find . -type d -name "__pycache__" -exec rm -rf {} +
  
-          echo "🐍 Activating virtual environment..."
-          if [ -d ".venv" ]; then
-            source .venv/bin/activate
-          else
-            echo "⚙️ Virtual environment not found — creating one..."
+          echo "🐍 Ensuring virtual environment exists..."
+          if [ ! -d ".venv" ]; then
+            echo "⚙️ Creating virtual environment..."
             python3 -m venv .venv
-            source .venv/bin/activate
           fi
+          source .venv/bin/activate
  
           echo "📥 Installing dependencies..."
           pip install --upgrade pip
           pip install -r requirements.txt
  
-          echo "🧾 Checking for .env file..."
+          echo "🧾 Checking .env..."
           if [ ! -f .env ]; then
-            echo "⚠️ .env file missing! Please upload it manually or use AWS Secrets Manager."
+            echo "⚠️ Missing .env file. Please ensure it's on EC2."
           fi
  
           echo "🔁 Restarting backend service..."
           sudo systemctl daemon-reload
-          sudo systemctl restart backend
+          sudo systemctl restart backend.service
  
           echo "✅ Backend deployed and restarted successfully!"
           EOF
