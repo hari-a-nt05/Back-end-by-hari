@@ -13,30 +13,22 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.9.0
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.3
         with:
-          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
-
-      - name: Deploy backend to EC2
-        run: |
-          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
-          set -e
-          cd /var/www/backend || sudo mkdir -p /var/www/backend && cd /var/www/backend
-          
-          if [ -d .git ]; then
-            git fetch origin main && git reset --hard origin/main
-          else
-            git clone https://github.com/${{ github.repository }} . 
-          fi
-
-          python3 -m venv .venv
-          source .venv/bin/activate
-          pip install --upgrade pip
-          pip install -r requirements.txt
-
-          echo "${{ secrets.BACKEND_ENV_FILE }}" > .env
-
-          sudo systemctl restart backend.service
-          sudo systemctl status backend.service --no-pager || true
-          EOF
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_KEY }}
+          script: |
+            cd /var/www/backend || sudo mkdir -p /var/www/backend && cd /var/www/backend
+            if [ -d .git ]; then
+              git fetch origin main && git reset --hard origin/main
+            else
+              git clone https://github.com/${{ github.repository }} .
+            fi
+            python3 -m venv .venv
+            source .venv/bin/activate
+            pip install --upgrade pip
+            pip install -r requirements.txt
+            echo "${{ secrets.BACKEND_ENV_FILE }}" > .env
+            sudo systemctl restart backend.service
