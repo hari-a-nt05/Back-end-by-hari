@@ -3,85 +3,35 @@ name: Deploy Backend to EC2
 on:
   push:
     branches:
-      - main  # Trigger workflow when code is pushed to main branch
+      - main
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Step 2: Setup SSH connection
-      - name: Setup SSH connection
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
-
-      # Step 3: Deploy backend to EC2 with backup & rollback
       - name: Deploy backend to EC2
         run: |
           ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
           set -e
-
-          echo "Navigating to backend directory..."
-          if [ ! -d "/var/www/backend" ]; then
-            sudo mkdir -p /var/www/backend
-            sudo chown ubuntu:ubuntu /var/www/backend
-          fi
-          cd /var/www/backend
-
-          echo "Creating backup before deployment..."
-          TIMESTAMP=$(date +"%Y%m%d-%H%M%S")
-          BACKUP_DIR="/var/www/ats-backups/backend"
-          sudo mkdir -p $BACKUP_DIR/logs
-          if [ -d /var/www/backend ]; then
-            sudo cp -r /var/www/backend $BACKUP_DIR/backend-$TIMESTAMP
-            echo "$(date): Backup created at $BACKUP_DIR/backend-$TIMESTAMP" | sudo tee -a $BACKUP_DIR/logs/deploy.log
-          else
-            echo "$(date): No existing backend found. Skipping backup." | sudo tee -a $BACKUP_DIR/logs/deploy.log
-          fi
-
-          echo "Fetching latest backend code..."
+          cd /var/www/backend || sudo mkdir -p /var/www/backend && cd /var/www/backend
+          
           if [ -d .git ]; then
             git fetch origin main && git reset --hard origin/main
           else
-            git clone https://github.com/${{ github.repository }} . || echo "Clone failed"
+            git clone https://github.com/${{ github.repository }} . 
           fi
 
-          echo "Setting up Python virtual environment..."
-          if [ ! -d ".venv" ]; then
-            python3 -m venv .venv
-          fi
+          python3 -m venv .venv
           source .venv/bin/activate
-
-          echo "Installing dependencies..."
           pip install --upgrade pip
           pip install -r requirements.txt
 
-          echo "Writing environment variables..."
           echo "${{ secrets.BACKEND_ENV_FILE }}" > .env
 
-          echo "Restarting backend service..."
-          if sudo systemctl restart backend.service; then
-            echo "Backend restarted successfully."
-          else
-            echo "Backend restart failed. Rolling back..."
-            BACKUP_DIR="/var/www/ats-backups/backend"
-            LATEST_BACKUP=$(ls -td $BACKUP_DIR/backend-* | head -1)
-            if [ -d "$LATEST_BACKUP" ]; then
-              sudo rm -rf /var/www/backend
-              sudo cp -r "$LATEST_BACKUP" /var/www/backend
-              sudo systemctl restart backend.service
-              echo "Rolled back to previous version: $LATEST_BACKUP"
-            else
-              echo "No rollback backup found. Manual recovery needed."
-            fi
-          fi
-
-          echo "Verifying backend service status..."
+          sudo systemctl restart backend.service
           sudo systemctl status backend.service --no-pager || true
-          echo "Backend deployment completed successfully."
           EOF
