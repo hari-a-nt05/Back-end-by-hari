@@ -2,47 +2,36 @@ name: Deploy Backend to EC2
 
 on:
   push:
-    branches:
-      - main
+    branches: [ "main" ]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout repository (in runner)
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      # Step 2: Deploy to EC2 and run deployment commands
-      - name: Deploy to EC2
-        uses: appleboy/ssh-action@v1.0.3
+      - uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            # Navigate to backend folder or create it
-            cd /var/www/backend || sudo mkdir -p /var/www/backend && cd /var/www/backend
+            set -e
+            sudo mkdir -p /var/www/backend
+            sudo chown ubuntu:ubuntu /var/www/backend
+            cd /var/www/backend
 
-            # If repo exists, pull latest changes. Else, clone fresh.
             if [ -d .git ]; then
-              echo "Updating existing repo..."
-              git fetch origin main
-              git reset --hard origin/main
+              git fetch origin main && git reset --hard origin/main
             else
-              echo "Cloning fresh repo..."
               git clone https://${{ secrets.GH_PERSONAL_TOKEN }}@github.com/${{ github.repository }} .
             fi
 
-            # Setup Python virtual environment
-            python3 -m venv .venv
+            [ ! -d ".venv" ] && python3 -m venv .venv
             source .venv/bin/activate
             pip install --upgrade pip
             pip install -r requirements.txt
 
-            # Write environment file
             echo "${{ secrets.BACKEND_ENV_FILE }}" > .env
-
-            # Restart backend service
             sudo systemctl restart backend.service
