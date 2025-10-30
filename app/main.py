@@ -19,7 +19,6 @@ logging.getLogger("uvicorn.access").handlers = logger.handlers
 app = FastAPI(title="HireHub Backend", version="1.0.0")
 
 
-# Add request/response logging middleware
 app.add_middleware(LoggingMiddleware)
 
 # CORS Configuration
