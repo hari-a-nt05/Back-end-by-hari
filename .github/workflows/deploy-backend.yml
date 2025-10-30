@@ -1,57 +1,58 @@
-name: 🚀 Deploy Backend to EC2
- 
+name: Deploy Backend to EC2
+
 on:
   push:
     branches:
-      - main  # Trigger on push to main
- 
+      - main  # Trigger workflow on push to main branch
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
- 
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
- 
-      - name: Setup SSH
+
+      - name: Setup SSH connection
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
- 
-      - name: 🚀 Deploy Backend to EC2
+
+      - name: Deploy backend to EC2
         run: |
           ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
           set -e
- 
-          echo "📂 Navigating to backend directory..."
+          
+          echo "Navigating to backend directory..."
+          if [ ! -d "/var/www/backend" ]; then
+            sudo mkdir -p /var/www/backend
+            sudo chown ubuntu:ubuntu /var/www/backend
+          fi
           cd /var/www/backend
- 
-          echo "📦 Pulling latest backend code..."
-          git fetch origin main
-          git reset --hard origin/main
- 
-          echo "🧹 Cleaning Python cache..."
-          find . -type d -name "__pycache__" -exec rm -rf {} +
- 
-          echo "🐍 Ensuring virtual environment exists..."
+
+          echo "Fetching latest backend code..."
+          if [ -d .git ]; then
+            git fetch origin main && git reset --hard origin/main
+          else
+            git clone https://github.com/${{ github.repository }} . || echo "Clone failed"
+          fi
+
+          echo "Setting up Python virtual environment..."
           if [ ! -d ".venv" ]; then
-            echo "⚙️ Creating virtual environment..."
             python3 -m venv .venv
           fi
           source .venv/bin/activate
- 
-          echo "📥 Installing dependencies..."
+
+          echo "Installing dependencies..."
           pip install --upgrade pip
           pip install -r requirements.txt
- 
-          echo "🧾 Checking .env..."
-          if [ ! -f .env ]; then
-            echo "⚠️ Missing .env file. Please ensure it's on EC2."
-          fi
- 
-          echo "🔁 Restarting backend service..."
+
+          echo "Writing environment variables..."
+          echo "${{ secrets.BACKEND_ENV_FILE }}" > .env
+
+          echo "Restarting backend service..."
           sudo systemctl daemon-reload
           sudo systemctl restart backend.service
- 
-          echo "✅ Backend deployed and restarted successfully!"
+
+          echo "Backend deployed successfully!"
           EOF
