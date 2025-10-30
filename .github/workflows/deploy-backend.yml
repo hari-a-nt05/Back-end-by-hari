@@ -10,22 +10,25 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Deploy to EC2
+      # Step 1: Copy backend code to EC2
+      - name: Copy backend files
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "."
+          target: "/var/www/backend"
+      
+      # Step 2: Install dependencies & restart service
+      - name: Install dependencies & restart service
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            cd /var/www/backend || sudo mkdir -p /var/www/backend && cd /var/www/backend
-            if [ -d .git ]; then
-              git fetch origin main && git reset --hard origin/main
-            else
-              git clone https://github.com/${{ github.repository }} .
-            fi
+            cd /var/www/backend
             python3 -m venv .venv
             source .venv/bin/activate
             pip install --upgrade pip
