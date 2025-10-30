@@ -18,7 +18,7 @@ jobs:
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
-          key: ${{ secrets.EC2_KEY }}
+          key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             cd /var/www/backend || sudo mkdir -p /var/www/backend && cd /var/www/backend
             if [ -d .git ]; then
