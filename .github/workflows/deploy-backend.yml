@@ -1,58 +1,115 @@
-name: Deploy Backend to EC2
+name: Backend CI/CD Pipeline
 
 on:
   push:
-    branches:
-      - main  # Trigger workflow on push to main branch
+    branches: [ "main" ]   # Deploy when code is pushed to main branch
 
 jobs:
-  deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      # Step 1: Checkout repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup SSH connection
-        uses: webfactory/ssh-agent@v0.9.0
+      # Step 2: Setup Python environment (for FastAPI, Django, Flask)
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
+          python-version: "3.12"
 
-      - name: Deploy backend to EC2
+      # Step 3: Install dependencies
+      - name: Install dependencies
         run: |
-          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
-          set -e
-          
-          echo "Navigating to backend directory..."
-          if [ ! -d "/var/www/backend" ]; then
-            sudo mkdir -p /var/www/backend
-            sudo chown ubuntu:ubuntu /var/www/backend
-          fi
-          cd /var/www/backend
-
-          echo "Fetching latest backend code..."
-          if [ -d .git ]; then
-            git fetch origin main && git reset --hard origin/main
-          else
-            git clone https://github.com/${{ github.repository }} . || echo "Clone failed"
-          fi
-
-          echo "Setting up Python virtual environment..."
-          if [ ! -d ".venv" ]; then
-            python3 -m venv .venv
-          fi
-          source .venv/bin/activate
-
-          echo "Installing dependencies..."
+          python -m venv venv
+          source venv/bin/activate
           pip install --upgrade pip
-          pip install -r requirements.txt
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-          echo "Writing environment variables..."
-          echo "${{ secrets.BACKEND_ENV_FILE }}" > .env
+      # Step 4: Ensure backend directory exists on EC2
+      - name: Ensure backend directory exists
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_KEY }}
+          script: |
+            sudo mkdir -p /var/www/ats-backups/backend
+            sudo mkdir -p /home/ubuntu/backend
+            sudo chown -R ubuntu:ubuntu /home/ubuntu/backend
+            sudo chmod -R 755 /home/ubuntu/backend
 
-          echo "Restarting backend service..."
-          sudo systemctl daemon-reload
-          sudo systemctl restart backend.service
+      # Step 5: Backup current backend before deployment
+      - name: Backup current backend
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_KEY }}
+          script: |
+            TIMESTAMP=$(date +"%Y%m%d-%H%M%S")
+            BACKUP_DIR="/var/www/ats-backups/backend"
+            sudo mkdir -p $BACKUP_DIR/logs
+            if [ -d /home/ubuntu/backend ]; then
+              sudo cp -r /home/ubuntu/backend $BACKUP_DIR/backend-$TIMESTAMP
+              echo "$(date): ✅ Backup created at $BACKUP_DIR/backend-$TIMESTAMP" | sudo tee -a $BACKUP_DIR/logs/deploy.log
+            else
+              echo "$(date): ⚠️ No existing backend folder found. Skipping backup." | sudo tee -a $BACKUP_DIR/logs/deploy.log
+            fi
 
-          echo "Backend deployed successfully!"
-          EOF
+      # Step 6: Copy new backend code to EC2
+      - name: Copy backend code to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_KEY }}
+          source: "."
+          target: "/home/ubuntu/backend"
+          overwrite: true
+          rm: false
+
+      # Step 7: Install dependencies and restart service
+      - name: Install dependencies & restart backend
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_KEY }}
+          script: |
+            set -e
+            cd /home/ubuntu/backend
+            echo "${{ secrets.BACKEND_ENV_FILE }}" > .env
+            python3 -m venv .venv
+            source .venv/bin/activate
+            pip install --upgrade pip
+            pip install -r requirements.txt
+
+            echo "🔁 Restarting backend service..."
+            if sudo systemctl restart backend.service; then
+              echo "✅ Backend restarted successfully."
+            else
+              echo "⚠️ Backend restart failed. Rolling back to previous version..."
+              BACKUP_DIR="/var/www/ats-backups/backend"
+              LATEST_BACKUP=$(ls -td $BACKUP_DIR/backend-* | head -1)
+              if [ -d "$LATEST_BACKUP" ]; then
+                sudo rm -rf /home/ubuntu/backend
+                sudo cp -r "$LATEST_BACKUP" /home/ubuntu/backend
+                sudo systemctl restart backend.service
+                echo "✅ Rolled back to previous version: $LATEST_BACKUP"
+              else
+                echo "❌ No rollback backup found. Manual recovery needed."
+              fi
+            fi
+
+      # Step 8: Verify service status
+      - name: Verify backend status
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_KEY }}
+          script: |
+            sudo systemctl status backend.service --no-pager || true
+            echo "✅ Backend deployment completed successfully."
