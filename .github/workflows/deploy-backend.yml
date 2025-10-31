@@ -13,7 +13,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Step 2: Copy backend code from GitHub Actions to EC2
+      # Step 2: Ensure /var/www/backend exists before SCP
+      - name: Create target directory on EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            sudo mkdir -p /var/www/backend
+            sudo chown -R ubuntu:ubuntu /var/www/backend
+
+      # Step 3: Copy backend code from GitHub Actions to EC2
       - name: Copy files to EC2
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -23,9 +34,9 @@ jobs:
           source: "."
           target: "/var/www/backend"
           overwrite: true
-          rm: false
+          rm: true
 
-      # Step 3: SSH into EC2 and deploy
+      # Step 4: SSH into EC2 and deploy
       - name: Configure and restart backend
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -46,10 +57,10 @@ jobs:
             pip install --upgrade pip
             pip install -r requirements.txt
 
-            # Apply environment variables
+            # Apply environment variables from GitHub Secret
             echo "${{ secrets.BACKEND_ENV_FILE }}" > .env
 
             # Restart backend service
             sudo systemctl daemon-reload
+            sudo systemctl enable backend.service
             sudo systemctl restart backend.service
-            sudo systemctl status backend.service --no-pager || true
