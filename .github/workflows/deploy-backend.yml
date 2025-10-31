@@ -13,19 +13,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Step 2: Ensure /var/www/backend exists before SCP
-      - name: Create target directory on EC2
+      # Step 2: Prepare EC2 backend directory (remove old, create new)
+      - name: Clean and recreate backend directory on EC2
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
+            set -e
+            sudo rm -rf /var/www/backend
             sudo mkdir -p /var/www/backend
             sudo chown -R ubuntu:ubuntu /var/www/backend
 
-      # Step 3: Copy backend code from GitHub Actions to EC2
-      - name: Copy files to EC2
+      # Step 3: Copy backend files from GitHub Actions to EC2
+      - name: Upload backend files to EC2
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -34,10 +36,10 @@ jobs:
           source: "."
           target: "/var/www/backend"
           overwrite: true
-          rm: true
+          rm: false
 
-      # Step 4: SSH into EC2 and deploy
-      - name: Configure and restart backend
+      # Step 4: Configure environment, run migrations, and restart service
+      - name: Configure backend and restart service
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -47,7 +49,9 @@ jobs:
             set -e
             cd /var/www/backend
 
-            # Ensure virtual environment
+            echo "Activating backend environment..."
+
+            # Create virtual environment if not exists
             if [ ! -d ".venv" ]; then
               python3 -m venv .venv
             fi
@@ -57,10 +61,18 @@ jobs:
             pip install --upgrade pip
             pip install -r requirements.txt
 
-            # Apply environment variables from GitHub Secret
+            # Apply environment variables
             echo "${{ secrets.BACKEND_ENV_FILE }}" > .env
 
+            # Run database migrations (FastAPI + Alembic)
+            if [ -f "alembic.ini" ]; then
+              echo "Running Alembic migrations..."
+              alembic upgrade head
+            fi
+
             # Restart backend service
+            echo "Restarting backend service..."
             sudo systemctl daemon-reload
             sudo systemctl enable backend.service
             sudo systemctl restart backend.service
+
